@@ -26,6 +26,7 @@
 //
 //         Here is an example code.
 //
+//             --------------------------------------------------
 //             import myMailer "mailer"
 //
 //             smtpServerHost := "noknow.info"
@@ -41,14 +42,17 @@
 //             authConfig := myMailer.GenPlainAuth(authUserName, authPassword, authHost)
 //             tlsConfig := myMailer.GenTlsConfig(smtpServerHost)
 //             params := GenParams(smtpServerHost, smtpServerPort, header, body, authConfig, tlsConfig)
+//             --------------------------------------------------
 //
 //     5. Send an email.
 //
 //         Here is an example code.
 //
+//             --------------------------------------------------
 //             if err := myMailer.Send(params); err != nil {
 //                 // Error handling
 //             }
+//             --------------------------------------------------
 //
 //
 // MIT License
@@ -76,6 +80,7 @@ package mailer
 
 import (
     "crypto/tls"
+    "errors"
     "net/smtp"
     "strconv"
 )
@@ -142,19 +147,18 @@ func Send(params *Params) error {
     if params.TlsConfig != nil {
         conn, err := tls.Dial("tcp", params.SmtpServerHost + ":" + strconv.Itoa(params.SmtpServerPort), params.TlsConfig)
         if err != nil {
-            return err
+            return errors.New("tls.Dial() error. err=" + err.Error())
         }
         c, err = smtp.NewClient(conn, params.SmtpServerHost)
         if err != nil {
-            return err
+            return errors.New("smtp.NewClient() error. err=" + err.Error())
         }
     } else {
         c, err = smtp.Dial(params.SmtpServerHost + ":" + strconv.Itoa(params.SmtpServerPort))
         if err != nil {
-            return err
+            return errors.New("smtp.Dial() error. err=" + err.Error())
         }
     }
-
     defer c.Close()
 
     // Authentication
@@ -162,37 +166,37 @@ func Send(params *Params) error {
         if params.AuthConfig.Crammd5Auth != nil {
             auth := smtp.CRAMMD5Auth(params.AuthConfig.Crammd5Auth.UserName, params.AuthConfig.Crammd5Auth.Secret)
             if err = c.Auth(auth); err != nil {
-                return err
+                return errors.New("(*Client) Auth() error. err=" + err.Error())
             }
         }
         if params.AuthConfig.PlainAuth != nil {
             auth := smtp.PlainAuth("", params.AuthConfig.PlainAuth.UserName, params.AuthConfig.PlainAuth.Password, params.AuthConfig.PlainAuth.Host)
             if err = c.Auth(auth); err != nil {
-                return err
+                return errors.New("(*Client) Auth() error. err=" + err.Error())
             }
         }
     }
 
     // Mail commands
     if err = c.Mail(params.Header.From); err != nil {
-        return err
+        return errors.New("(*Client) Mail() error. err=" + err.Error())
     }
     if err = c.Rcpt(params.Header.To); err != nil {
-        return err
+        return errors.New("(*Client) Rcpt() error. err=" + err.Error())
     }
     wc, err := c.Data()
     if err != nil {
-        return err
+        return errors.New("(*Client) Data() error. err=" + err.Error())
     }
     _, err = wc.Write(body)
     if err != nil {
-        return err
+        return errors.New("(io.WriteCloser) Write() error. err=" + err.Error())
     }
     if err = wc.Close(); err != nil {
-        return err
+        return errors.New("(*Client) Quit() error. err=" + err.Error())
     }
     if err = c.Quit(); err != nil {
-        return err
+        return errors.New("(*Client) Quit() error. err=" + err.Error())
     }
     return nil
 }
