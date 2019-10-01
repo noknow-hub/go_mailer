@@ -5,6 +5,10 @@
 // 
 //     1. Import this package.
 //
+//         --------------------------------------------------
+//         import myMailer "mailer"
+//         --------------------------------------------------
+//
 //     2. Prepare following variables.
 //
 //         - SMTP Server Host: string
@@ -12,47 +16,149 @@
 //         - Mail From: string
 //         - Mail To: string
 //         - Mail Subject: string
-//         - Mail Body: string
 //         - (Optional) Mail Auth User Name: string
 //         - (Optional) Mail Auth Password: string
 //
-//     3. Generate following structs.
+//         --------------------------------------------------
+//         smtpServerHost := "example.com"
+//         smtpServerPort := 465
+//         authUserName := "noknow"
+//         authPassword := "noknow_pass"
+//         authHost := "example.com"
+//         from := "noknow<noreply@example.com>"
+//         to := "user@example.com"
+//         subject := "This is a subject."
+//         --------------------------------------------------
 //
-//         - Header Struct: GenHeader() function.
-//         - (Optional) AuthConfig Struct: GenCRAMMD5Auth() or GenPlainAuth() function.
-//         - (Optional) tls.Config Struct: GenTlsConfig() function.
+//     3. Generate a mail body.
 //
-//     4. Generate Params struct.
-//
-//         Here is an example code.
-//
-//             --------------------------------------------------
-//             import myMailer "mailer"
-//
-//             smtpServerHost := "noknow.info"
-//             smtpServerPort := 465
-//             from := "info@noknow.info"
-//             to := "xxx@example.com"
-//             subject := "This is a subject"
-//             body := "This is a message."
-//             authUserName := "noknow_auth"
-//             authPassword := "noknow_auth_pass"
-//             authHost := "noknow.info"
-//             header myMailer.GenHeader(from, to, subject, myMailer.MIME_VERSION_1_0, false, myMailer.CHARSET_UTF8)
-//             authConfig := myMailer.GenPlainAuth(authUserName, authPassword, authHost)
-//             tlsConfig := myMailer.GenTlsConfig(smtpServerHost)
-//             params := GenParams(smtpServerHost, smtpServerPort, header, body, authConfig, tlsConfig)
-//             --------------------------------------------------
-//
-//     5. Send an email.
-//
-//         Here is an example code.
+//         3-A. Prepare a body parameters.
 //
 //             --------------------------------------------------
-//             if err := myMailer.Send(params); err != nil {
-//                 // Error handling
+//             bodyParams := map[string]string{
+//                 "langCode": "en",
+//                 "title": "noknow",
+//                 "heading": "This is a heading.",
 //             }
 //             --------------------------------------------------
+//
+//         3-1. When using HTML file and text file, which means multipart/alternative.
+//
+//             [sample.html]
+//             --------------------------------------------------
+//             <!DOCTYPE html>
+//             <html lang="{{ .langCode }}">
+//             <head>
+//               {{template "head" .}}
+//               <title>{{ .title }}</title>
+//             </head>
+//             <body>
+//               <table>
+//                 <tr>
+//                   <td><h1>{{ .heading }}</h1></td>
+//                 </tr>
+//               </table>
+//             </body>
+//             </html>
+//             --------------------------------------------------
+//
+//             [head.html]
+//             --------------------------------------------------
+//             {{define "head"}}
+//             <meta charset="UTF-8">
+//             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+//             <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+//             {{end}}
+//             --------------------------------------------------
+//
+//             [sample.txt]
+//             --------------------------------------------------
+//             {{ .title }}
+//             {{ .heading }}
+//             --------------------------------------------------
+//
+//             --------------------------------------------------
+//             // HTML body.
+//             htmlFiles := []string{
+//                 "sample.html",
+//                 "head.html",
+//             }
+//             htmlBody, err := myMailer.GenBodyFromFiles(
+//                 myMailer.CONTENT_TYPE_TEXT_HTML,
+//                 myMailer.CHARSET_UTF8,
+//                 htmlFiles,
+//                 bodyParams,
+//             )
+//             if err != nil {
+//                 // Error handling.
+//             }
+//
+//             // HTML body.
+//             textFiles := []string{
+//                 "sample.txt",
+//             }
+//             textBody, err := myMailer.GenBodyFromFiles(
+//                 myMailer.CONTENT_TYPE_TEXT_PLAIN,
+//                 myMailer.CHARSET_UTF8,
+//                 textFiles,
+//                 bodyParams,
+//             )
+//             if err != nil {
+//                 // Error handling.
+//             }
+//
+//             // If body are 2 or more, the last index would be used in according to RFC1341.
+//             // In the following case, HTML body would be used.
+//             // You can set only one body.
+//             body := []*myMailer.Body{textBody, htmlBody}
+//             --------------------------------------------------
+//
+//     4. Generate a mail header.
+//
+//         --------------------------------------------------
+//         header := myMailer.GenHeader(from, to, subject, myMailer.MIME_VERSION_1_0)
+//         --------------------------------------------------
+//
+//     5. Generate an authentication config. (Optional)
+//
+//         --------------------------------------------------
+//         authConfig := myMailer.GenPlainAuth(authUserName, authPassword, authHost)
+//         --------------------------------------------------
+//
+//     6. Generate a TLS config. (Optional)
+//
+//         --------------------------------------------------
+//         tlsConfig := myMailer.GenTlsConfig(smtpServerHost)
+//
+//         // When using certificate and private key par.
+//         certFile := "/etc/letsencrypt/live/noknow.info/fullchain.pem"
+//         keyFile := "/etc/letsencrypt/live/noknow.info/privkey.pem"
+//         tlsConfig, err = myMailer.SetCertFiles(tlsConfig, certFile, keyFile)
+//         if err != nil {
+//             // Error handling.
+//         }
+//         --------------------------------------------------
+//
+//     7. Generate a mail parameter.
+//
+//         --------------------------------------------------
+//         params := myMailer.GenParams(
+//             smtpServerHost,
+//             smtpServerPort,
+//             header,
+//             body,
+//             authConfig,
+//             tlsConfig
+//         )
+//         --------------------------------------------------
+//
+//     8. Send an email.
+//
+//         --------------------------------------------------
+//         if err := myMailer.Send(params); err != nil {
+//             // Error handling
+//         }
+//         --------------------------------------------------
 //
 //
 // MIT License
@@ -79,20 +185,31 @@
 package mailer
 
 import (
+    "bytes"
     "crypto/tls"
     "errors"
+    "html/template"
+    "math/rand"
     "net/smtp"
+    "path"
     "strconv"
+    "time"
 )
 
 const (
+    CHARSET_ISO_2022_JP = "iso-2022-jp"
+    CHARSET_US_ASCII = "us-ascii"
     CHARSET_UTF8 = "UTF-8"
+    CONTENT_TYPE_TEXT_HTML = "text/html"
+    CONTENT_TYPE_TEXT_PLAIN = "text/plain"
+    CONTENT_TYPE_TEXT_RICHTEXT = "text/richtext"
+    CONTENT_TYPE_TEXT_X_WHATEVER = "text/x-whatever"
     MIME_VERSION_1_0 = "1.0"
 )
 
 type Params struct {
     AuthConfig *AuthConfig
-    Body string
+    Body []*Body
     Header *Header
     SmtpServerHost string
     SmtpServerPort int
@@ -102,7 +219,6 @@ type Params struct {
 type Header struct {
     From string
     MimeVersion string
-    ContentType string
     Subject string
     To string
 }
@@ -123,23 +239,41 @@ type PlainAuth struct {
     Host string
 }
 
-
+type Body struct {
+    ContentType string
+    Charset string
+    Data string
+}
 
 //////////////////////////////////////////////////////////////////////
 // Send Email
 //////////////////////////////////////////////////////////////////////
 func Send(params *Params) error {
-    // Set up headers and message
+    // Set up headers and message.
     headers := make(map[string]string)
     headers["From"] = params.Header.From
     headers["To"] = params.Header.To
     headers["Subject"] = params.Header.Subject
-    headers["MIME-version"] = params.Header.MimeVersion + "\r\n" + params.Header.ContentType
+    headers["MIME-version"] = params.Header.MimeVersion
     body := make([]byte, 0)
     for k,v := range headers {
         body = append(body, k + ": " + v + "\r\n"...)
     }
-    body = append(body, "\r\n" + params.Body...)
+    var boundary string
+    if len(params.Body) > 1 {
+        boundary = genBoundary()
+        body = append(body, "Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n"...)
+    }
+    for _, b := range params.Body {
+        if len(params.Body) > 1 {
+            body = append(body, "--" + boundary + "\r\nContent-Type: " + b.ContentType + "; charset=\"" + b.Charset + "\"\r\n" + b.Data + "\r\n"...)
+        } else {
+            body = append(body, "Content-Type: " + b.ContentType + "; charset=\"" + b.Charset + "\"\r\n" + b.Data + "\r\n"...)
+        }
+    }
+    if len(params.Body) > 1 {
+        body = append(body, "--" + boundary + "--\r\n"...)
+    }
 
     // Connect to the SMTP server
     var c *smtp.Client
@@ -211,7 +345,7 @@ func Send(params *Params) error {
 // @param authConfig *AuthConfig: Authentication configuration.
 // @param tlsConfig *tls.Config: TLS configuration.
 //////////////////////////////////////////////////////////////////////
-func GenParams(smtpServerHost string, smtpServerPort int, header *Header, body string, authConfig *AuthConfig, tlsConfig *tls.Config) *Params {
+func GenParams(smtpServerHost string, smtpServerPort int, header *Header, body []*Body, authConfig *AuthConfig, tlsConfig *tls.Config) *Params {
     return &Params{
         AuthConfig: authConfig,
         Body: body,
@@ -263,13 +397,38 @@ func GenTlsConfig(serverName string) *tls.Config {
 
 
 //////////////////////////////////////////////////////////////////////
+// Set certificate files into the TLS config.
+//////////////////////////////////////////////////////////////////////
+func SetCertFiles(tlsConfig *tls.Config, certFile string, keyFile string) (*tls.Config, error) {
+    cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+    if err != nil {
+        return tlsConfig, err
+    }
+    tlsConfig.Certificates = []tls.Certificate{cert}
+    return tlsConfig, nil
+}
+
+
+//////////////////////////////////////////////////////////////////////
+// Set certificate bytes into the TLS config.
+//////////////////////////////////////////////////////////////////////
+func SetCertBytes(tlsConfig *tls.Config, certPem []byte, keyPem []byte) (*tls.Config, error) {
+    cert, err := tls.X509KeyPair(certPem, keyPem)
+    if err != nil {
+        return tlsConfig, err
+    }
+    tlsConfig.Certificates = []tls.Certificate{cert}
+    return tlsConfig, nil
+}
+
+
+//////////////////////////////////////////////////////////////////////
 // Generate Header Struct
 //////////////////////////////////////////////////////////////////////
-func GenHeader(from string, to string, subject string, mimeVersion string, isHtml bool, charset string) *Header {
+func GenHeader(from string, to string, subject string, mimeVersion string) *Header {
     return &Header{
         From: from,
         MimeVersion: mimeVersion,
-        ContentType: genContentType(isHtml, charset),
         Subject: subject,
         To: to,
     }
@@ -277,13 +436,62 @@ func GenHeader(from string, to string, subject string, mimeVersion string, isHtm
 
 
 //////////////////////////////////////////////////////////////////////
-// Generate Content Type
+// Generate a mail body from files.
 //////////////////////////////////////////////////////////////////////
-func genContentType(isHtml bool, charset string) string {
-    if isHtml {
-        return "Content-Type: text/html; charset=\"" + charset + "\";"
-    } else {
-        return "Content-Type: text/plain; charset=\"" + charset + "\";"
+func GenBodyFromFiles(contentType string, charset string, fileNames []string, params map[string]string) (*Body, error) {
+    f := template.FuncMap{
+        "safeHTML": func(s string) template.HTML { return template.HTML(s) },
     }
+    t, err := template.New(path.Base(fileNames[0])).Funcs(f).ParseFiles(fileNames...)
+    if err != nil {
+        return nil, err
+    }
+    buffer := new(bytes.Buffer)
+    if err := t.Execute(buffer, params); err != nil {
+        return nil, err
+    }
+    body := &Body{
+        ContentType: contentType,
+        Charset: charset,
+        Data: buffer.String(),
+    }
+    return body, nil
 }
 
+
+//////////////////////////////////////////////////////////////////////
+// Generate a mail body from strings.
+//////////////////////////////////////////////////////////////////////
+func GenBodyFromString(contentType string, charset string, text string, params map[string]string) (*Body, error) {
+    f := template.FuncMap{
+        "safeHTML": func(s string) template.HTML { return template.HTML(s) },
+    }
+    t, err := template.New("t").Funcs(f).Parse(text)
+    if err != nil {
+        return nil, err
+    }
+    buffer := new(bytes.Buffer)
+    if err := t.Execute(buffer, params); err != nil {
+        return nil, err
+    }
+    body := &Body{
+        ContentType: contentType,
+        Charset: charset,
+        Data: buffer.String(),
+    }
+    return body, nil
+}
+
+
+//////////////////////////////////////////////////////////////////////
+// Generate a radom value for boundary.
+//////////////////////////////////////////////////////////////////////
+func genBoundary() string {
+    charset := "1234567890abcdefghijklmnopqrstuvwxyz"
+    r := rand.New(rand.NewSource(time.Now().UnixNano()))
+    b := make([]byte, 32)
+    for i := range b {
+        b[i] = charset[r.Intn(len(charset))]
+    }
+    return string(b)
+}
